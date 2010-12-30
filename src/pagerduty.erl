@@ -39,6 +39,7 @@ trigger(IncidentKey, Description) ->
     trigger(IncidentKey, Description, undefined).
 
 trigger(IncidentKey, Description, Details) ->
+    
     gen_server:cast(?MODULE, {trigger, IncidentKey, Description, Details}).
 
 %%====================================================================
@@ -77,14 +78,20 @@ handle_call(_Msg, _From, State) ->
 %% @hidden
 %%--------------------------------------------------------------------
 handle_cast({trigger, IncidentKey, Description, Details}, #state{service_key=ServiceKey}=State) ->
-    Json = build_json([
+    case (catch build_json([
         {"service_key", ServiceKey},
         {"incident_key", IncidentKey},
         {"event_type", "trigger"},
-        {"description", Description}
-    ] ++ [{"details", Details} || Details =/= undefined]),
-    Res = post(Json),
-    io:format("post(~p): ~p~n", [Json, Res]),
+        {"description", Description}] ++ [{"details", Details} || Details =/= undefined])) of
+        {'EXIT', Err} ->
+            io:format("failed building json (~p, ~p, ~p): ~p~n", [IncidentKey, Description, Details, Err]);
+        Json ->
+            case post(Json) of
+                {ok,{{_,200,_},_,_}} -> ok;
+                Err1 ->
+                    io:format("failed posting to pagerduty: ~p~n", [Err1])
+            end
+    end, 
     {noreply, State};
 
 handle_cast(_Msg, State) ->
