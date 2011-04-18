@@ -27,7 +27,7 @@
 -export([start_link/1, init/1, handle_call/3, handle_cast/2, 
          handle_info/2, terminate/2, code_change/3]).
 
--export([trigger/2, trigger/3, build_json/1]).
+-export([trigger/2, trigger/3, call/3, cast/3, build_json/1]).
 
 -record(state, {service_key}).
 
@@ -39,7 +39,12 @@ trigger(IncidentKey, Description) ->
     trigger(IncidentKey, Description, undefined).
 
 trigger(IncidentKey, Description, Details) ->
-    
+    cast(IncidentKey, Description, Details).
+
+call(IncidentKey, Description, Details) ->
+    gen_server:call(?MODULE, {trigger, IncidentKey, Description, Details}, 10000).
+
+cast(IncidentKey, Description, Details) ->
     gen_server:cast(?MODULE, {trigger, IncidentKey, Description, Details}).
 
 %%====================================================================
@@ -67,6 +72,23 @@ init([ServiceKey]) ->
 %% Description: Handling call messages
 %% @hidden
 %%--------------------------------------------------------------------
+handle_call({trigger, IncidentKey, Description, Details}, _From, #state{service_key=ServiceKey}=State) ->
+    case (catch build_json([
+        {"service_key", ServiceKey},
+        {"incident_key", IncidentKey},
+        {"event_type", "trigger"},
+        {"description", Description}] ++ [{"details", Details} || Details =/= undefined])) of
+        {'EXIT', Err} ->
+            {reply, Err, State};
+        Json ->
+            case post(Json) of
+                {ok,{{_,200,_},_,_}} ->
+                    {reply, ok, State};
+                Err1 ->
+                    {reply, Err1, State}
+            end
+    end;
+
 handle_call(_Msg, _From, State) ->
     {reply, {error, invalid_call}, State}.
 
