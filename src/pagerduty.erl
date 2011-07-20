@@ -161,7 +161,7 @@ build_json([{Key, Value}|Tail], Index, Acc) ->
     build_json(Tail, Index+1, [
         [<<"'">>, Key, <<"': ">>,
             case Value of
-                Atom when is_atom(Atom) -> [<<"'">>, atom_to_list(Key), <<"'">>];
+                Atom when is_atom(Atom) -> [<<"'">>, atom_to_list(Atom), <<"'">>];
                 [C|_]=List when is_integer(C) -> [<<"'">>, List, <<"'">>];
                 Bin when is_binary(Bin) -> [<<"'">>, Bin, <<"'">>];
                 Int when is_integer(Int) -> integer_to_list(Int);
@@ -172,4 +172,4 @@ build_json([{Key, Value}|Tail], Index, Acc) ->
         [<<", ">> || Index > 0]|Acc]).
 
 post(Json) ->
-    http:request(post, {"https://events.pagerduty.com/generic/2010-04-15/create_event.json", [], "application/json", Json}, [], []).
+    httpc:request(post, {"https://events.pagerduty.com/generic/2010-04-15/create_event.json", [], "application/json", Json}, [], []).
