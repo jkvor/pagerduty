@@ -159,15 +159,15 @@ build_json([], _, Acc) ->
 
 build_json([{Key, Value}|Tail], Index, Acc) ->
     build_json(Tail, Index+1, [
-        [<<"'">>, Key, <<"': ">>,
+        [<<"\"">>, Key, <<"\": ">>,
             case Value of
-                Atom when is_atom(Atom) -> [<<"'">>, atom_to_list(Atom), <<"'">>];
-                [C|_]=List when is_integer(C) -> [<<"'">>, List, <<"'">>];
-                Bin when is_binary(Bin) -> [<<"'">>, Bin, <<"'">>];
+                Atom when is_atom(Atom) -> [<<"\"">>, atom_to_list(Atom), <<"\"">>];
+                [C|_]=List when is_integer(C) -> [<<"\"">>, List, <<"\"">>];
+                Bin when is_binary(Bin) -> [<<"\"">>, Bin, <<"\"">>];
                 Int when is_integer(Int) -> integer_to_list(Int);
                 Float when is_float(Float) -> float_to_list(Float);
                 [Tuple|_]=List when is_tuple(Tuple) -> build_json(List);
-                Other -> io_lib:format("'~p'", [Other])
+                Other -> io_lib:format("\"~p\"", [Other])
             end] ++
         [<<", ">> || Index > 0]|Acc]).
 
