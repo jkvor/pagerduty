@@ -27,7 +27,8 @@
 -export([start_link/1, init/1, handle_call/3, handle_cast/2, 
          handle_info/2, terminate/2, code_change/3]).
 
--export([trigger/2, trigger/3, call/3, cast/3, build_json/1]).
+-export([trigger/2, trigger/3, resolve/1, resolve/2, resolve/3]).
+-export([call/3, cast/3, build_json/1]).
 
 -record(state, {service_key}).
 
@@ -35,11 +36,19 @@
 start_link(ServiceKey) ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [ServiceKey], []).
 
+% Trigger an incident
 trigger(IncidentKey, Description) ->
     trigger(IncidentKey, Description, undefined).
-
 trigger(IncidentKey, Description, Details) ->
     cast(IncidentKey, Description, Details).
+
+% Resolve an incident
+resolve(IncidentKey) ->
+    resolve(IncidentKey, undefined, undefined).
+resolve(IncidentKey, Description) ->
+    resolve(IncidentKey, Description, undefined).
+resolve(IncidentKey, Description, Details) ->
+    gen_server:cast(?MODULE, {resolve, IncidentKey, Description, Details}).
 
 call(IncidentKey, Description, Details) ->
     gen_server:call(?MODULE, {trigger, IncidentKey, Description, Details}, 10000).
@@ -99,22 +108,10 @@ handle_call(_Msg, _From, State) ->
 %% Description: Handling cast messages
 %% @hidden
 %%--------------------------------------------------------------------
-handle_cast({trigger, IncidentKey, Description, Details}, #state{service_key=ServiceKey}=State) ->
-    case (catch build_json([
-        {"service_key", ServiceKey},
-        {"incident_key", IncidentKey},
-        {"event_type", "trigger"},
-        {"description", Description}] ++ [{"details", Details} || Details =/= undefined])) of
-        {'EXIT', Err} ->
-            io:format("failed building json (~p, ~p, ~p): ~p~n", [IncidentKey, Description, Details, Err]);
-        Json ->
-            case post(Json) of
-                {ok,{{_,200,_},_,_}} -> ok;
-                Err1 ->
-                    io:format("failed posting to pagerduty: ~p~n", [Err1])
-            end
-    end, 
+handle_cast({EventType, IncidentKey, Description, Details}, #state{service_key=ServiceKey}=State) ->
+    post_api(EventType, IncidentKey, Description, Details, ServiceKey), 
     {noreply, State};
+
 
 handle_cast(_Msg, State) ->
     {noreply, State}.
@@ -151,6 +148,23 @@ code_change(_OldVsn, State, _Extra) ->
 %%--------------------------------------------------------------------
 %%% Internal functions
 %%--------------------------------------------------------------------
+post_api(EventType, IncidentKey, Description, Details, ServiceKey) ->
+    case (catch build_json([
+        {"service_key", ServiceKey},
+        {"incident_key", IncidentKey},
+        {"event_type", atom_to_list(EventType)}]
+        ++ [{"description", Description} || Description =/= undefined]
+        ++ [{"details", Details} || Details =/= undefined])) of
+        {'EXIT', Err} ->
+            io:format("failed building json (~p, ~p, ~p): ~p~n", [IncidentKey, Description, Details, Err]);
+        Json ->
+            case post(Json) of
+                {ok,{{_,200,_},_,_}} -> ok;
+                Err1 ->
+                    io:format("failed posting to pagerduty: ~p~n", [Err1])
+            end
+    end.
+
 build_json(Props) ->
     build_json(lists:reverse(Props), 0, []).
 
