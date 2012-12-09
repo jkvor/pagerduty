@@ -27,7 +27,7 @@
 -export([start_link/1, init/1, handle_call/3, handle_cast/2, 
          handle_info/2, terminate/2, code_change/3]).
 
--export([trigger/2, trigger/3, call/3, cast/3, build_json/1]).
+-export([trigger/2, trigger/3, call/3, cast/3]).
 
 -record(state, {service_key}).
 
@@ -73,22 +73,9 @@ init([ServiceKey]) ->
 %% @hidden
 %%--------------------------------------------------------------------
 handle_call({trigger, IncidentKey, Description, Details}, _From, #state{service_key=ServiceKey}=State) ->
-    case (catch build_json([
-        {"service_key", ServiceKey},
-        {"incident_key", IncidentKey},
-        {"event_type", "trigger"},
-        {"description", Description}] ++ [{"details", Details} || Details =/= undefined])) of
-        {'EXIT', Err} ->
-            {reply, Err, State};
-        Json ->
-            case post(Json) of
-                {ok,{{_,200,_},_,_}} ->
-                    {reply, ok, State};
-                Err1 ->
-                    {reply, Err1, State}
-            end
-    end;
-
+    Result = build_and_post(ServiceKey, IncidentKey, Description, Details),
+    {reply, Result, State};
+        
 handle_call(_Msg, _From, State) ->
     {reply, {error, invalid_call}, State}.
 
@@ -100,24 +87,13 @@ handle_call(_Msg, _From, State) ->
 %% @hidden
 %%--------------------------------------------------------------------
 handle_cast({trigger, IncidentKey, Description, Details}, #state{service_key=ServiceKey}=State) ->
-    case (catch build_json([
-        {"service_key", ServiceKey},
-        {"incident_key", IncidentKey},
-        {"event_type", "trigger"},
-        {"description", Description}] ++ [{"details", Details} || Details =/= undefined])) of
-        {'EXIT', Err} ->
-            io:format("failed building json (~p, ~p, ~p): ~p~n", [IncidentKey, Description, Details, Err]);
-        Json ->
-            case post(Json) of
-                {ok,{{_,200,_},_,_}} -> ok;
-                Err1 ->
-                    io:format("failed posting to pagerduty: ~p~n", [Err1])
-            end
-    end, 
-    {noreply, State};
-
-handle_cast(_Msg, State) ->
-    {noreply, State}.
+    case build_and_post(ServiceKey, IncidentKey, Description, Details) of
+        ok ->
+            {noreply, State};
+        Err ->
+            io:format("failed posting to pagerduty: ~p~n", [Err]),
+            {noreply, State}
+    end.
 
 %%--------------------------------------------------------------------
 %% Function: handle_info(Info, State) -> {noreply, State} |
@@ -151,25 +127,29 @@ code_change(_OldVsn, State, _Extra) ->
 %%--------------------------------------------------------------------
 %%% Internal functions
 %%--------------------------------------------------------------------
-build_json(Props) ->
-    build_json(lists:reverse(Props), 0, []).
-
-build_json([], _, Acc) ->
-    iolist_to_binary([<<"{">>] ++ Acc ++ [<<"}">>]);
-
-build_json([{Key, Value}|Tail], Index, Acc) ->
-    build_json(Tail, Index+1, [
-        [<<"'">>, Key, <<"': ">>,
-            case Value of
-                Atom when is_atom(Atom) -> [<<"'">>, atom_to_list(Atom), <<"'">>];
-                [C|_]=List when is_integer(C) -> [<<"'">>, List, <<"'">>];
-                Bin when is_binary(Bin) -> [<<"'">>, Bin, <<"'">>];
-                Int when is_integer(Int) -> integer_to_list(Int);
-                Float when is_float(Float) -> float_to_list(Float);
-                [Tuple|_]=List when is_tuple(Tuple) -> build_json(List);
-                Other -> io_lib:format("'~p'", [Other])
-            end] ++
-        [<<", ">> || Index > 0]|Acc]).
+build_and_post(ServiceKey, IncidentKey, Description, Details) ->
+    case catch jsx:encode([{<<"service_key">>, to_bin(ServiceKey)},
+                           {<<"incident_key">>, to_bin(IncidentKey)},
+                           {<<"event_type">>, <<"trigger">>},
+                           {<<"description">>, to_bin(Description)}] ++ [{<<"details">>, to_bin(Details)} || Details =/= undefined]) of
+        {'EXIT', Err} ->
+            Err;
+        Json ->
+            case post(Json) of
+                {ok,{{_,200,_},_,_}} ->
+                    ok;
+                Err1 ->
+                    Err1
+            end
+    end.
 
 post(Json) ->
-    httpc:request(post, {"https://events.pagerduty.com/generic/2010-04-15/create_event.json", [], "application/json", Json}, [], []).
+    httpc:request(post,
+                  {"https://events.pagerduty.com/generic/2010-04-15/create_event.json", [], "application/json", Json},
+                  [],
+                  []).
+
+to_bin(X) when is_list(X) ->
+    list_to_binary(X);
+to_bin(X) when is_binary(X) ->
+    X.
