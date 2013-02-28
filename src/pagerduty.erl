@@ -131,7 +131,7 @@ build_and_post(ServiceKey, IncidentKey, Description, Details) ->
     case catch jsx:encode([{<<"service_key">>, to_bin(ServiceKey)},
                            {<<"incident_key">>, to_bin(IncidentKey)},
                            {<<"event_type">>, <<"trigger">>},
-                           {<<"description">>, to_bin(Description)}] ++ [{<<"details">>, to_bin(Details)} || Details =/= undefined]) of
+                           {<<"description">>, list_to_binary(string:substr(to_list(Description), 1, 1024))}] ++ [{<<"details">>, to_bin(Details)} || Details =/= undefined]) of
         {'EXIT', Err} ->
             Err;
         Json ->
@@ -148,6 +148,11 @@ post(Json) ->
                   {"https://events.pagerduty.com/generic/2010-04-15/create_event.json", [], "application/json", Json},
                   [],
                   []).
+
+to_list(X) when is_list(X) ->
+    X;
+to_list(X) when is_binary(X) ->
+    binary:bin_to_list(X).
 
 to_bin(X) when is_list(X) ->
     list_to_binary(X);
