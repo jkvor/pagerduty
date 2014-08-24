@@ -37,15 +37,19 @@ stop(_State) ->
     ok.
 
 init([]) ->
-    ServiceKey =
-        case application:get_env(pagerduty, service_key) of
-            {ok, Val} -> Val;
-            undefined ->
-                case os:getenv("PAGERDUTY_SERVICE_KEY") of
-                    false -> undefined;
-                    Val -> Val
-                end
-        end,
+    ServiceKey = get_env(service_key),
+    RetryWait = get_env(retry_wait),
     {ok, {{one_for_one, 5, 10}, [
-        {pagerduty, {pagerduty, start_link, [ServiceKey]}, permanent, 2000, worker, [pagerduty]}
+        {pagerduty, {pagerduty, start_link, [ServiceKey, RetryWait]}, permanent, 2000, worker, [pagerduty]}
     ]}}.
+
+get_env(Env) ->
+    case application:get_env(pagerduty, Env) of
+        {ok, Val} -> Val;
+        undefined ->
+            OsEnv = string:to_upper("PAGERDUTY_" ++ atom_to_list(Env)),
+            case os:getenv(OsEnv) of
+                false -> undefined;
+                Val -> Val
+            end
+    end.
