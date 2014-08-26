@@ -8,10 +8,10 @@ REBAR=./rebar
 
 PAGERDUTY_PLT=$(CURDIR)/.depsolver_plt
 
-.PHONY: dialyzer typer clean distclean
+.PHONY: dialyzer typer clean distclean test
 
 compile:
-	@./rebar get-deps compile
+	@$(REBAR) get-deps compile
 
 $(PAGERDUTY_PLT):
 	dialyzer --output_plt $(PAGERDUTY_PLT) --build_plt \
@@ -29,3 +29,7 @@ clean:
 distclean: clean
 	rm $(PAGERDUTY_PLT)
 	rm -rvf $(CURDIR)/deps/*
+
+test: REBAR := REBAR_TEST_DEPS=1 $(REBAR)
+test: compile
+	@$(REBAR) ct

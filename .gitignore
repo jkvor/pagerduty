@@ -1,9 +1,12 @@
 .eunit
+.rebar
 deps
 priv
+logs
 *.o
 *.beam
 *.plt
 .erlang.cookie
 ebin
 .depsolver_plt
+variables-ct@*
