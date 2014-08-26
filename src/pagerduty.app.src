@@ -2,7 +2,7 @@
     {description, "Erlang pagerduty client"},
     {vsn, "1.0"},
     {modules, []},
-    {applications, [stdlib, kernel, sasl, inets, crypto, public_key, ssl, jsx]},
+    {applications, [stdlib, kernel, inets, crypto, public_key, asn1, ssl, jsx]},
     {registered, []},
     {mod, {pagerduty_app, []}}
 ]}.
